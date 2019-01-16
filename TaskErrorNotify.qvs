@@ -1,0 +1,154 @@
+////////////////////////////////////////////////////////////////////
+//	Author - Aaron Couron
+//	http://livingqlik.com
+//	10/24/2018
+//
+//	the author grants free use of this app but claims no liability
+//	or responsibility for any negative effects you might
+//	encounter using it within any Qlik Sense environment.
+///////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////
+//	PREREQUISITES:
+//	This app requires the (free) SMTP Web Connector within the
+//		Qlik QlikWebConnectors package found at the Qlik software download page.
+//	This app utilizes the ServerLogsFolder which will require developer to have access
+//		to this built in connection.
+//	The Qlik Server will need to be put into Legacy mode because the data sources
+//		require dynamic URLs.
+///////////////////////////////////////////////////////////////////
+
+
+///////////////////////////////////////////////////////////////////
+//	OBS:
+//	I dont put the Qlik Server into Legacy mode.
+//  There's need to create a Connetor "Web Archive" with the url
+// to the WebConnector "http://localhost:5555/"
+//
+///////////////////////////////////////////////////////////////////
+
+
+
+//	Set Log Location
+set vFileLocation	=	'lib://ServerLogFolder (win-qp4blc317f1_administrator)';
+
+//	Set here how many minutes ago you want to scoop logs for
+//	This should coincide with the frequency in minutes of the reload task for this app.
+set vMinutesToGoBack	=	5;
+
+//	email settings:
+set vRecipient	=	'joao.souza@datalakers.com.br';
+set vQwcConnectionName = 'lib://SMTP Connector (win-qp4blc317f1_administrator)';
+set vMailServer	=	'smtp.gmail.com';
+set vPort	=	587;
+set vSSLMode	=	'Explicit';
+set vSubject	=	'Error found in Qlik Sense Server Task';
+set vMessage	= 	'Reload task errors have been encountered within the last $(vMinutesToGoBack) minutes on the Qlik Sense Server. Log in to the <a href="https://con-qssrv.calprocorp.local/qmc/tasks">QMC</a> to review the tasks and associated log entries.';
+set vFromName	=	'Task Error Monitor';
+set	vFromEmail	=	'taskerrormonitor@gmail.com';
+set vUserName	=	'taskerrormonitor@gmail.com';
+
+
+
+///////////////////////////////////////////////////////////////
+//	Do not adjust past this line
+///////////////////////////////////////////////////////////////
+
+//	create a dummy table in case there are no errors.
+Script_Log:
+load * inline [
+ObjectId
+];
+
+let vDecimalTime	=	$(vMinutesToGoBack)/1440;
+let vLogStart	=	num(now()) - $(vDecimalTime);
+
+for each vFile in FileList('$(vFileLocation)\*.txt')
+
+concatenate(Script_Log)
+//load if(wildmatch(Text_Log,'Error:*'),1,0) as Err0r_Flag,*;
+LOAD '$(vFile)' as File,
+	ObjectId & Timestamp as id,
+    Sequence#,
+    "ProductVersion",
+    (num(floor(Timestamp)) +
+    	((mid(Timestamp,10,2)*60) +
+    	mid(Timestamp,12,2) +
+    	(mid(Timestamp,14,2)/100) )
+     	/1440) as TimestampNum,
+    Timestamp,
+    Severity,
+    Hostname,
+    Id,
+    Description,
+    ProxySessionId,
+    ProxyPackageId,
+    RequestSequenceId,
+    UserDirectory,
+    "UserId",
+    ObjectId,
+    ObjectName,
+    "Service",
+    Origin,
+    Context,
+    Command,
+    Result,
+    Message,
+    Id2
+from [$(vFile)]
+(txt, utf8, embedded labels, delimiter is '\t', msq)
+where wildmatch(Severity,'ERROR')
+	and Result = 65
+    and not wildmatch(Message,'*skipped*')
+	and (num(floor(Timestamp)) +
+    	((mid(Timestamp,10,2)*60) +
+    	mid(Timestamp,12,2) +
+    	(mid(Timestamp,14,2)/100) )
+     	/1440) > $(vLogStart);
+
+next vFile;
+
+//exit script;
+
+Err0r:
+load count(ObjectId) as Err0rCount
+resident Script_Log;
+
+Let vErr0r	=	if(isnull(peek('Err0rCount',0,'Err0r'))
+					,0
+                    ,peek('Err0rCount',0,'Err0r'));
+trace vErr0r	=	$(vErr0r);
+
+drop table Err0r;
+
+if $(vErr0r)>0 then
+
+//	some url encoding to eliminate spaces and @
+let vRecipient 	= 	replace('$(vRecipient)','@','%40');
+let vSubject	=	replace('$(vSubject)',' ','+');
+let vFromName	=	replace('$(vFromName)',' ','+');
+let	vFromEmail	=	replace('$(vFromEmail)','@','%40');
+
+let vMessage	= 	'The reload of app <b>' & peek('ObjectName',-1,'Script_Log') & '</b> has failed with errors within the last $(vMinutesToGoBack) minutes on the Qlik Sense Server. Log in to the <a href="https://con-qssrv.calprocorp.local/qmc/tasks">QMC</a> to review the tasks and associated log entries.';
+let vMessage	=	replace('$(vMessage)',' ','+');
+
+SMTPConnector_SendEmail:
+LOAD
+    status as SendEmail_status,
+    result as SendEmail_result,
+    filesattached as SendEmail_filesattached
+FROM [$(vQwcConnectionName)]
+(URL IS [http://localhost:5555/data?connectorID=SMTPConnector&table=SendEmail&SMTPServer=$(vMailServer)&Port=$(vPort)&SSLmode=$(vSSLMode)&to=$(vRecipient)&subject=$(vSubject)&message=$(vMessage)&html=True&fromName=$(vFromName)&fromEmail=$(vFromEmail)&delayInSeconds=0&appID=&UserName=$(vUserName)&Password=IQNzJnXDviFNwZ9lXENJGg%3d%3d%3anp1PmJsOlJvu3oXtiXV3yg%3d%3d&ignoreProxy=False&asDownload=true], qvx);
+
+trace email sent;
+trace url = 'http://localhost:5555/data?connectorID=SMTPConnector&table=SendEmail&SMTPServer=$(vMailServer)&Port=$(vPort)&SSLmode=$(vSSLMode)&to=$(vRecipient)&subject=$(vSubject)&message=$(vMessage)&html=True&fromName=$(vFromName)&fromEmail=$(vFromEmail)&delayInSeconds=0&appID=&UserName=$(vUserName)&Password=IQNzJnXDviFNwZ9lXENJGg%3d%3d%3anp1PmJsOlJvu3oXtiXV3yg%3d%3d&ignoreProxy=False&asDownload=true';
+
+// IMPORTANT: If, when loading the above script, you receive a 'Script Error' Dialog box with a 'Field Not Found'
+// (or other) error, the first thing you should do is copy and paste the full request URL (i.e. the URL between the square [...]
+// brackets IN THE QLIKVIEW / QLIK SENSE SCRIPT ERROR DIALOG) into a browser address bar and check the response.
+
+else
+
+trace	No errors found - Not sending email;
+
+end if;

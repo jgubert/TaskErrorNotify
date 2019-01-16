@@ -110,8 +110,9 @@ next vFile;
 
 //exit script;
 
+
 Err0r:
-load count(ObjectId) as Err0rCount
+load count(distinct ObjectId) as Err0rCount
 resident Script_Log;
 
 Let vErr0r	=	if(isnull(peek('Err0rCount',0,'Err0r'))
@@ -121,7 +122,17 @@ trace vErr0r	=	$(vErr0r);
 
 drop table Err0r;
 
+
 if $(vErr0r)>0 then
+
+let vFailedTasks = '';
+
+Do while vErr0r > 0
+    let vErr0r = $(vErr0r) -1;
+    let vFailedTasks = '$(vFailedTasks)'& peek('ObjectName', $(vErr0r),'Script_Log')&' ';
+    trace vErr0r	=	$(vErr0r);
+
+Loop
 
 //	some url encoding to eliminate spaces and @
 let vRecipient 	= 	replace('$(vRecipient)','@','%40');
@@ -129,7 +140,7 @@ let vSubject	=	replace('$(vSubject)',' ','+');
 let vFromName	=	replace('$(vFromName)',' ','+');
 let	vFromEmail	=	replace('$(vFromEmail)','@','%40');
 
-let vMessage	= 	'The reload of app <b>' & peek('ObjectName',-1,'Script_Log') & '</b> has failed with errors within the last $(vMinutesToGoBack) minutes on the Qlik Sense Server. Log in to the <a href="https://con-qssrv.calprocorp.local/qmc/tasks">QMC</a> to review the tasks and associated log entries.';
+let vMessage	= 	'The reload of app <b>' & '$(vFailedTasks)' & '</b> has failed with errors within the last $(vMinutesToGoBack) minutes on the Qlik Sense Server. Log in to the <a href="https://con-qssrv.calprocorp.local/qmc/tasks">QMC</a> to review the tasks and associated log entries.';
 let vMessage	=	replace('$(vMessage)',' ','+');
 
 SMTPConnector_SendEmail:
@@ -141,7 +152,7 @@ FROM [$(vQwcConnectionName)]
 (URL IS [http://localhost:5555/data?connectorID=SMTPConnector&table=SendEmail&SMTPServer=$(vMailServer)&Port=$(vPort)&SSLmode=$(vSSLMode)&to=$(vRecipient)&subject=$(vSubject)&message=$(vMessage)&html=True&fromName=$(vFromName)&fromEmail=$(vFromEmail)&delayInSeconds=0&appID=&UserName=$(vUserName)&Password=IQNzJnXDviFNwZ9lXENJGg%3d%3d%3anp1PmJsOlJvu3oXtiXV3yg%3d%3d&ignoreProxy=False&asDownload=true], qvx);
 
 trace email sent;
-trace url = 'http://localhost:5555/data?connectorID=SMTPConnector&table=SendEmail&SMTPServer=$(vMailServer)&Port=$(vPort)&SSLmode=$(vSSLMode)&to=$(vRecipient)&subject=$(vSubject)&message=$(vMessage)&html=True&fromName=$(vFromName)&fromEmail=$(vFromEmail)&delayInSeconds=0&appID=&UserName=$(vUserName)&Password=IQNzJnXDviFNwZ9lXENJGg%3d%3d%3anp1PmJsOlJvu3oXtiXV3yg%3d%3d&ignoreProxy=False&asDownload=true';
+// trace url = 'http://localhost:5555/data?connectorID=SMTPConnector&table=SendEmail&SMTPServer=$(vMailServer)&Port=$(vPort)&SSLmode=$(vSSLMode)&to=$(vRecipient)&subject=$(vSubject)&message=$(vMessage)&html=True&fromName=$(vFromName)&fromEmail=$(vFromEmail)&delayInSeconds=0&appID=&UserName=$(vUserName)&Password=IQNzJnXDviFNwZ9lXENJGg%3d%3d%3anp1PmJsOlJvu3oXtiXV3yg%3d%3d&ignoreProxy=False&asDownload=true';
 
 // IMPORTANT: If, when loading the above script, you receive a 'Script Error' Dialog box with a 'Field Not Found'
 // (or other) error, the first thing you should do is copy and paste the full request URL (i.e. the URL between the square [...]

@@ -61,7 +61,11 @@ ObjectId
 ];
 
 let vDecimalTime	=	$(vMinutesToGoBack)/1440;
-let vLogStart	=	num(now()) - $(vDecimalTime);
+let vNow = num(now(1));
+let vLogStart	=	num(now(1)) - $(vDecimalTime);
+
+trace vNow = $(vNow);
+trace vLogStart = $(vLogStart);
 
 for each vFile in FileList('$(vFileLocation)\*.txt')
 
@@ -129,7 +133,7 @@ let vFailedTasks = '';
 
 Do while vErr0r > 0
     let vErr0r = $(vErr0r) -1;
-    let vFailedTasks = '$(vFailedTasks)'& peek('ObjectName', $(vErr0r),'Script_Log')&' ';
+    let vFailedTasks = '$(vFailedTasks)' & peek('ObjectName', $(vErr0r),'Script_Log') & ' ';
     trace vErr0r	=	$(vErr0r);
 
 Loop

@@ -34,7 +34,8 @@ set vFileLocation	=	'lib://ServerLogFolder (win-qp4blc317f1_administrator)';
 
 //	Set here how many minutes ago you want to scoop logs for
 //	This should coincide with the frequency in minutes of the reload task for this app.
-set vMinutesToGoBack	=	5;
+set vMinutesToGoBack	=	600;
+let vServerName = ComputerName();
 
 //	email settings:
 set vRecipient	=	'joao.souza@datalakers.com.br';
@@ -42,7 +43,7 @@ set vQwcConnectionName = 'lib://SMTP Connector (win-qp4blc317f1_administrator)';
 set vMailServer	=	'smtp.gmail.com';
 set vPort	=	587;
 set vSSLMode	=	'Explicit';
-set vSubject	=	'Error found in Qlik Sense Server Task';
+set vSubject	=	'$(vServerName) | Algo nao ocorreu como esperado';
 set vMessage	= 	'Reload task errors have been encountered within the last $(vMinutesToGoBack) minutes on the Qlik Sense Server. Log in to the <a href="https://con-qssrv.calprocorp.local/qmc/tasks">QMC</a> to review the tasks and associated log entries.';
 set vFromName	=	'Task Error Monitor';
 set	vFromEmail	=	'taskerrormonitor@gmail.com';
@@ -133,7 +134,17 @@ let vFailedTasks = '';
 
 Do while vErr0r > 0
     let vErr0r = $(vErr0r) -1;
-    let vFailedTasks = '$(vFailedTasks)' & peek('ObjectName', $(vErr0r),'Script_Log') & ' ';
+    let vTaskName = peek('ObjectName', $(vErr0r),'Script_Log');
+    let vTaskName = SubField('$(vTaskName)', '|', 1);
+
+
+    let vFailedTasks = '$(vFailedTasks)' & '"' & '$(vTaskName)' & '"';
+    if $(vErr0r) > 0 then
+      let vFailedTasks = '$(vFailedTasks)' & ', ';
+      else
+      let vFailedTasks = '$(vFailedTasks)' & '.';
+      end if;
+
     trace vErr0r	=	$(vErr0r);
 
 Loop
@@ -144,7 +155,8 @@ let vSubject	=	replace('$(vSubject)',' ','+');
 let vFromName	=	replace('$(vFromName)',' ','+');
 let	vFromEmail	=	replace('$(vFromEmail)','@','%40');
 
-let vMessage	= 	'The reload of app <b>' & '$(vFailedTasks)' & '</b> has failed with errors within the last $(vMinutesToGoBack) minutes on the Qlik Sense Server. Log in to the <a href="https://con-qssrv.calprocorp.local/qmc/tasks">QMC</a> to review the tasks and associated log entries.';
+//let vMessage	= 	'The reload of app <b>' & '$(vFailedTasks)' & '</b> has failed with errors within the last $(vMinutesToGoBack) minutes on the Qlik Sense Server. Log in to the <a href="https://con-qssrv.calprocorp.local/qmc/tasks">QMC</a> to review the tasks and associated log entries.';
+let vMessage	= 	'Ocorreu um erro durante a execucao das seguintes tasks: <b>' & '$(vFailedTasks)' & '</b>. Esta falha ocorreu nos ultimos $(vMinutesToGoBack) minutos no servidor $(vServerName).';
 let vMessage	=	replace('$(vMessage)',' ','+');
 
 SMTPConnector_SendEmail:

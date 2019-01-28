@@ -135,10 +135,14 @@ let vFailedTasks = '';
 Do while vErr0r > 0
     let vErr0r = $(vErr0r) -1;
     let vTaskName = peek('ObjectName', $(vErr0r),'Script_Log');
+    // vTaskName save only the task name, without the app name.
     let vTaskName = SubField('$(vTaskName)', '|', 1);
 
 
+    // Concatenate the name of the task with commas
     let vFailedTasks = '$(vFailedTasks)' & '"' & '$(vTaskName)' & '"';
+
+    // If is the last task, put a ".", else put a "," and the following task name
     if $(vErr0r) > 0 then
       let vFailedTasks = '$(vFailedTasks)' & ', ';
       else

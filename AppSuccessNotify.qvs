@@ -1,4 +1,9 @@
 ////////////////////////////////////////////////////////////////////
+//	Author - João de Souza
+//	http://datalakers.com.br
+//	30/01/2019
+//
+//  Based on the code Task Error Notify
 //	Author - Aaron Couron
 //	http://livingqlik.com
 //	10/24/2018
@@ -30,7 +35,7 @@
 
 
 //	Set Log Location
-set vFileLocation	=	'lib://ServerLogFolder (win-qp4blc317f1_administrator)';
+// set vFileLocation	=	'lib://ServerLogFolder (win-qp4blc317f1_administrator)';
 
 //	Set here how many minutes ago you want to scoop logs for
 //	This should coincide with the frequency in minutes of the reload task for this app.
@@ -43,9 +48,9 @@ set vQwcConnectionName = 'lib://SMTP Connector (win-qp4blc317f1_administrator)';
 set vMailServer	=	'smtp.gmail.com';
 set vPort	=	587;
 set vSSLMode	=	'Explicit';
-set vSubject	=	'$(vServerName) | Algo nao ocorreu como esperado';
-set vMessage	= 	'Reload task errors have been encountered within the last $(vMinutesToGoBack) minutes on the Qlik Sense Server. Log in to the <a href="https://con-qssrv.calprocorp.local/qmc/tasks">QMC</a> to review the tasks and associated log entries.';
-set vFromName	=	'Task Error Monitor';
+set vSubject	=	'$(vServerName) | Task finalizada com sucesso!';
+//set vMessage	= 	'Reload task errors have been encountered within the last $(vMinutesToGoBack) minutes on the Qlik Sense Server. Log in to the <a href="https://con-qssrv.calprocorp.local/qmc/tasks">QMC</a> to review the tasks and associated log entries.';
+set vFromName	=	'App Success Monitor';
 set	vFromEmail	=	'taskerrormonitor@gmail.com';
 set vUserName	=	'taskerrormonitor@gmail.com';
 
@@ -55,112 +60,18 @@ set vUserName	=	'taskerrormonitor@gmail.com';
 //	Do not adjust past this line
 ///////////////////////////////////////////////////////////////
 
-//	create a dummy table in case there are no errors.
-Script_Log:
-load * inline [
-ObjectId
-];
-
-let vDecimalTime	=	$(vMinutesToGoBack)/1440;
-let vNow = num(now(1));
-let vLogStart	=	num(now(1)) - $(vDecimalTime);
-
-trace vNow = $(vNow);
-trace vLogStart = $(vLogStart);
-
-for each vFile in FileList('$(vFileLocation)\*.txt')
-
-concatenate(Script_Log)
-//load if(wildmatch(Text_Log,'Error:*'),1,0) as Err0r_Flag,*;
-LOAD '$(vFile)' as File,
-	ObjectId & Timestamp as id,
-    Sequence#,
-    "ProductVersion",
-    (num(floor(Timestamp)) +
-    	((mid(Timestamp,10,2)*60) +
-    	mid(Timestamp,12,2) +
-    	(mid(Timestamp,14,2)/100) )
-     	/1440) as TimestampNum,
-    Timestamp,
-    Severity,
-    Hostname,
-    Id,
-    Description,
-    ProxySessionId,
-    ProxyPackageId,
-    RequestSequenceId,
-    UserDirectory,
-    "UserId",
-    ObjectId,
-    ObjectName,
-    "Service",
-    Origin,
-    Context,
-    Command,
-    Result,
-    Message,
-    Id2
-from [$(vFile)]
-(txt, utf8, embedded labels, delimiter is '\t', msq)
-where wildmatch(Severity,'ERROR')
-	and Result = 65
-    and not wildmatch(Message,'*skipped*')
-	and (num(floor(Timestamp)) +
-    	((mid(Timestamp,10,2)*60) +
-    	mid(Timestamp,12,2) +
-    	(mid(Timestamp,14,2)/100) )
-     	/1440) > $(vLogStart);
-
-next vFile;
-
-//exit script;
 
 
-Err0r:
-load count(distinct ObjectId) as Err0rCount
-resident Script_Log;
-
-Let vErr0r	=	if(isnull(peek('Err0rCount',0,'Err0r'))
-					,0
-                    ,peek('Err0rCount',0,'Err0r'));
-trace vErr0r	=	$(vErr0r);
-
-drop table Err0r;
-
-
-if $(vErr0r)>0 then
-
-let vFailedTasks = '';
-
-Do while vErr0r > 0
-    let vErr0r = $(vErr0r) -1;
-    let vTaskName = peek('ObjectName', $(vErr0r),'Script_Log');
-    // vTaskName save only the task name, without the app name.
-    let vTaskName = SubField('$(vTaskName)', '|', 1);
-
-
-    // Concatenate the name of the task with commas
-    let vFailedTasks = '$(vFailedTasks)' & '"' & '$(vTaskName)' & '"';
-
-    // If is the last task, put a ".", else put a "," and the following task name
-    if $(vErr0r) > 0 then
-      let vFailedTasks = '$(vFailedTasks)' & ', ';
-      else
-      let vFailedTasks = '$(vFailedTasks)' & '.';
-      end if;
-
-    trace vErr0r	=	$(vErr0r);
-
-Loop
 
 //	some url encoding to eliminate spaces and @
 let vRecipient 	= 	replace('$(vRecipient)','@','%40');
 let vSubject	=	replace('$(vSubject)',' ','+');
 let vFromName	=	replace('$(vFromName)',' ','+');
 let	vFromEmail	=	replace('$(vFromEmail)','@','%40');
+let vSuccessTask = DocumentTitle();
 
 //let vMessage	= 	'The reload of app <b>' & '$(vFailedTasks)' & '</b> has failed with errors within the last $(vMinutesToGoBack) minutes on the Qlik Sense Server. Log in to the <a href="https://con-qssrv.calprocorp.local/qmc/tasks">QMC</a> to review the tasks and associated log entries.';
-let vMessage	= 	'Ocorreu um erro durante a execucao das seguintes tasks: <b>' & '$(vFailedTasks)' & '</b>. Esta falha ocorreu nos ultimos $(vMinutesToGoBack) minutos no servidor $(vServerName).';
+let vMessage	= 	'A execucao da tarefa associada ao App <b>' & '$(vSuccessTask)' & '</b> foi concluida com sucesso no servidor $(vServerName).';
 let vMessage	=	replace('$(vMessage)',' ','+');
 
 SMTPConnector_SendEmail:
@@ -177,9 +88,3 @@ trace email sent;
 // IMPORTANT: If, when loading the above script, you receive a 'Script Error' Dialog box with a 'Field Not Found'
 // (or other) error, the first thing you should do is copy and paste the full request URL (i.e. the URL between the square [...]
 // brackets IN THE QLIKVIEW / QLIK SENSE SCRIPT ERROR DIALOG) into a browser address bar and check the response.
-
-else
-
-trace	No errors found - Not sending email;
-
-end if;
